@@ -14,12 +14,13 @@ export default function ComparePreview({ code }: { code: string }) {
         }
         itemTwo={
           <img
-            src="/target.png"
+            src="/target3.png"
             alt="Target"
             className="w-full h-full object-contain"
           />
         }
         position={50}
+        changePositionOnHover={true}
         onlyHandleDraggable={true}
         className="w-full h-full"
       />

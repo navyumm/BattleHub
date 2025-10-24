@@ -1,10 +1,12 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import CodeEditor from "./Editor";
 import ComparePreview from "./ComparePreview";
 import { toast } from "react-hot-toast";
+import html2canvas from "html2canvas";
+import { compareImages } from "./utils/compareImages";
 
-const colors = ["#d9d8d8", "#232223"];
+const colors = ["#e8ad6d", "#3a240d"];
 
 export default function PlayPage() {
   const [code, setCode] = useState(`
@@ -24,17 +26,37 @@ div {
   `);
 
   const [matchScore, setMatchScore] = useState<number | null>(null);
+  const previewRef = useRef<HTMLIFrameElement>(null);
 
   const copyToClipboard = (color: string) => {
     navigator.clipboard.writeText(color);
     toast.success(`${color} copied!`);
   };
 
-  const handleCheckMatch = () => {
-    // Placeholder logic
-    const randomScore = Math.floor(Math.random() * 100);
-    setMatchScore(randomScore);
-    toast.success(`Image matched ${randomScore}%`);
+  const handleCheckMatch = async () => {
+    try {
+      const iframe = document.querySelector("iframe");
+      const targetImg = "/target3.png";
+
+      if (!iframe?.contentDocument?.body) {
+        toast.error("Preview not ready");
+        return;
+      }
+
+      // capture preview as image
+      const canvas = await html2canvas(iframe.contentDocument.body, {
+        backgroundColor: null,
+      });
+      const previewImage = canvas.toDataURL("image/png");
+
+      // compare target vs preview
+      const similarity = await compareImages(targetImg, previewImage);
+      setMatchScore(similarity);
+      toast.success(`Image matched ${similarity}%`);
+    } catch (err) {
+      console.error(err);
+      toast.error("Comparison failed");
+    }
   };
 
   return (
@@ -57,7 +79,8 @@ div {
           </button>
           {matchScore !== null && (
             <div className="text-sm text-gray-300">
-              Your Score: <span className="text-purple-400 font-semibold">{matchScore}%</span>
+              Your Score:{" "}
+              <span className="text-purple-400 font-semibold">{matchScore}%</span>
             </div>
           )}
         </div>
@@ -77,7 +100,7 @@ div {
           {/* Target Image */}
           <div className="h-[50vh] flex items-center justify-center bg-[#111] rounded-xl shadow-lg">
             <img
-              src="/target.png"
+              src="/target3.png"
               alt="Target"
               className="w-full h-full object-contain rounded-xl"
             />
