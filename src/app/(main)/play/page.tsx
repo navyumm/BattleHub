@@ -1,128 +1,159 @@
 "use client";
-import { useState, useRef } from "react";
-import CodeEditor from "./Editor";
-import ComparePreview from "./ComparePreview";
-import { toast } from "react-hot-toast";
-import html2canvas from "html2canvas";
-import { compareImages } from "./utils/compareImages";
 
-const colors = ["#e8ad6d", "#3a240d"];
+import { useRouter } from "next/navigation";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import dayjs from "dayjs";
 
 export default function PlayPage() {
-  const [code, setCode] = useState(`
-<div></div>
-<style>
-body {
-  background: #191919;
-}
-div {
-  width: 100px;
-  height: 100px;
-  background: orange;
-  border-radius: 50%;
-  margin: 90px auto;
-}
-</style>
-  `);
+  const router = useRouter();
 
-  const [matchScore, setMatchScore] = useState<number | null>(null);
-  const previewRef = useRef<HTMLIFrameElement>(null);
+  const [currentMonth, setCurrentMonth] = useState(dayjs());
+  const [availableTargets, setAvailableTargets] = useState<Record<number, string>>({});
+  const [loading, setLoading] = useState(false);
 
-  const copyToClipboard = (color: string) => {
-    navigator.clipboard.writeText(color);
-    toast.success(`${color} copied!`);
-  };
+  // Cache for already loaded months (useRef so it doesn't cause re-render)
+  const cacheRef = useRef<Record<string, Record<number, string>>>({});
 
-  const handleCheckMatch = async () => {
-    try {
-      const iframe = document.querySelector("iframe");
-      const targetImg = "/target3.png";
+  const monthKey = useMemo(
+    () => currentMonth.format("YYYY-MM"),
+    [currentMonth]
+  );
+  const monthAbbr = useMemo(
+    () => currentMonth.format("MMM").toLowerCase(),
+    [currentMonth]
+  );
+  const daysInMonth = currentMonth.daysInMonth();
+  const firstDay = currentMonth.startOf("month").day();
 
-      if (!iframe?.contentDocument?.body) {
-        toast.error("Preview not ready");
-        return;
-      }
+  const handleDayClick = useCallback(
+    (day: number) => {
+      if (availableTargets[day]) router.push(`/play/${day}`);
+    },
+    [router, availableTargets]
+  );
 
-      // capture preview as image
-      const canvas = await html2canvas(iframe.contentDocument.body, {
-        backgroundColor: null,
-      });
-      const previewImage = canvas.toDataURL("image/png");
-
-      // compare target vs preview
-      const similarity = await compareImages(targetImg, previewImage);
-      setMatchScore(similarity);
-      toast.success(`Image matched ${similarity}%`);
-    } catch (err) {
-      console.error(err);
-      toast.error("Comparison failed");
+  useEffect(() => {
+    if (cacheRef.current[monthKey]) {
+      setAvailableTargets(cacheRef.current[monthKey]);
+      setLoading(false);
+      return;
     }
-  };
+
+    const loadMonthTargets = async () => {
+      setLoading(true);
+      const targets: Record<number, string> = {};
+
+      // Use Promise.all for parallel fetches (faster)
+      await Promise.all(
+        Array.from({ length: daysInMonth }, async (_, i) => {
+          const day = i + 1;
+          const imgSrc = `/${monthAbbr}-${day}.png`;
+          try {
+            const res = await fetch(imgSrc, { method: "HEAD" });
+            if (res.ok) targets[day] = imgSrc;
+          } catch {
+            /* ignore */
+          }
+        })
+      );
+
+      // Save to cache
+      cacheRef.current[monthKey] = targets;
+      setAvailableTargets(targets);
+      setLoading(false);
+    };
+
+    loadMonthTargets();
+  }, [monthKey, monthAbbr, daysInMonth]);
 
   return (
-    <div className="flex w-full bg-[#0d0d0d] text-white overflow-hidden pt-[80px] h-[calc(100vh-80px)]">
+    <div className="min-h-screen bg-gradient-to-br from-black via-[#120019] to-[#000000] text-white flex flex-col items-center pt-28 pb-10 px-6">
+      {/* ===== Header ===== */}
+      <h1 className="text-3xl font-bold mb-6 text-center">
+        Daily CSS Challenges
+      </h1>
 
-      {/* Left: Code Editor */}
-      <div className="w-1/3 h-full border-r border-purple-500/20 flex flex-col">
-        {/* Editor */}
-        <div className="flex-1">
-          <CodeEditor code={code} setCode={setCode} />
-        </div>
+      {/* ===== Month Navigation ===== */}
+      <div className="flex items-center justify-center gap-6 mb-10">
+        <button
+          onClick={() => setCurrentMonth(currentMonth.subtract(1, "month"))}
+          className="text-2xl text-gray-400 hover:text-white transition border px-3 cursor-pointer hover:scale-105"
+        >
+          ‹
+        </button>
 
-        {/* Button + Score (bottom section) */}
-        <div className="h-[18vh] flex flex-col items-center justify-center border-t border-purple-500/20 bg-[#111] p-2">
-          <button
-            onClick={handleCheckMatch}
-            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition"
-          >
-            Submit
-          </button>
-          {matchScore !== null && (
-            <div className="text-sm text-gray-300">
-              Your Score:{" "}
-              <span className="text-purple-400 font-semibold">{matchScore}%</span>
-            </div>
-          )}
-        </div>
+        <h2 className="text-2xl font-semibold text-purple-400">
+          {currentMonth.format("MMMM YYYY")}
+        </h2>
+
+        <button
+          onClick={() => setCurrentMonth(currentMonth.add(1, "month"))}
+          className="text-2xl text-gray-400 hover:text-white transition border px-3 cursor-pointer hover:scale-105"
+        >
+          ›
+        </button>
       </div>
 
-      {/* Right Section */}
-      <div className="w-2/3 h-full flex gap-4 p-4">
-
-        {/* Center: Live Preview */}
-        <div className="w-1/2 h-[50vh] flex items-center justify-center bg-[#111] rounded-xl overflow-hidden">
-          <ComparePreview code={code} />
-        </div>
-
-        {/* Right: Target Image + Palette */}
-        <div className="w-1/2 flex flex-col gap-4">
-          
-          {/* Target Image */}
-          <div className="h-[50vh] flex items-center justify-center bg-[#111] rounded-xl shadow-lg">
-            <img
-              src="/target3.png"
-              alt="Target"
-              className="w-full h-full object-contain rounded-xl"
-            />
+      {/* ===== Calendar Grid ===== */}
+      <div className="grid grid-cols-7 gap-4 w-full max-w-5xl">
+        {/* Weekday Headings */}
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <div
+            key={d}
+            className="text-center text-gray-500 font-semibold text-sm uppercase tracking-wider"
+          >
+            {d}
           </div>
+        ))}
 
-          {/* Color Palette */}
-          <div className="h-[20vh] flex items-center justify-around bg-[#111] rounded-xl border border-purple-400/30 p-4">
-            {colors.map((color) => (
-              <div
-                key={color}
-                className="flex flex-col items-center cursor-pointer"
-                onClick={() => copyToClipboard(color)}
-              >
-                <div
-                  className="w-10 h-10 rounded-full border border-gray-600 mb-1"
-                  style={{ backgroundColor: color }}
-                ></div>
-                <span className="text-sm text-gray-300">{color}</span>
+        {/* Empty slots before month start */}
+        {Array.from({ length: firstDay }).map((_, i) => (
+          <div key={`empty-${i}`} />
+        ))}
+
+        {/* Day Cells */}
+        {Array.from({ length: daysInMonth }, (_, i) => {
+          const day = i + 1;
+          const imgSrc = availableTargets[day];
+          const hasTarget = Boolean(imgSrc);
+
+          return (
+            <div
+              key={day}
+              onClick={() => hasTarget && handleDayClick(day)}
+              className={`relative group aspect-square flex flex-col rounded-xl border border-gray-800 bg-[#111] overflow-hidden transition-transform duration-300 ${
+                hasTarget
+                  ? "cursor-pointer hover:scale-105 hover:border-purple-500"
+                  : "opacity-40 cursor-not-allowed"
+              }`}
+            >
+              {/* ===== Date (top-right) ===== */}
+              <span className="absolute top-2 right-2 text-xs text-gray-400 transition-opacity duration-300 group-hover:opacity-0">
+                {day}
+              </span>
+
+              {/* ===== Image Area ===== */}
+              <div className="flex items-center justify-center flex-[3]">
+                {loading ? (
+                  <div className="w-[60%] h-[60%] bg-gray-800 animate-pulse rounded-md" />
+                ) : imgSrc ? (
+                  <img
+                    src={imgSrc}
+                    alt={`Target ${day}`}
+                    className="w-[75%] h-[75%] object-contain transition-transform duration-300 group-hover:scale-110"
+                  />
+                ) : (
+                  <div className="w-[75%] h-[75%] border border-gray-700 rounded-md" />
+                )}
               </div>
-            ))}
-          </div>
-        </div>
+
+              {/* ===== Status Area ===== */}
+              <div className="flex-[1] w-full flex items-center justify-center text-xs font-medium border-t border-gray-800 text-gray-400">
+                {loading ? "Loading..." : hasTarget ? "Not Played" : "No Target"}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

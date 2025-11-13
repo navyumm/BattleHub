@@ -35,7 +35,7 @@ export default function ProfilePage() {
   };
 
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-black via-[#120019] to-[#1e1b4b] text-white p-8">
+    <main className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-black via-[#120019] to-[#000000] text-white p-8">
       <div className="bg-black/60 backdrop-blur-xl border border-purple-500/30 rounded-2xl shadow-2xl p-10 w-full max-w-2xl text-center">
         <h1 className="text-3xl font-bold mb-3 text-orange-400">
           Welcome to Your Battle Zone ⚡

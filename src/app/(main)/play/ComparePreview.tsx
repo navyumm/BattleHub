@@ -1,7 +1,13 @@
 "use client";
 import { ReactCompareSlider } from "react-compare-slider";
 
-export default function ComparePreview({ code }: { code: string }) {
+export default function ComparePreview({
+  code,
+  targetImage,
+}: {
+  code: string;
+  targetImage: string;
+}) {
   return (
     <div className="w-full h-full">
       <ReactCompareSlider
@@ -14,7 +20,7 @@ export default function ComparePreview({ code }: { code: string }) {
         }
         itemTwo={
           <img
-            src="/target3.png"
+            src={targetImage}
             alt="Target"
             className="w-full h-full object-contain"
           />
