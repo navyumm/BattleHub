@@ -4,15 +4,26 @@ import type { NextRequest } from 'next/server'
 export function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname
 
-  const isPublicPath = path === '/' || path === '/login' || path === '/signup' || path === '/verifyemail'
+  // PUBLIC ROUTES
+  const isPublicPath =
+    path === '/' ||
+    path === '/login' ||
+    path === '/signup' ||
+    path === '/verifyemail'
+
   const token = request.cookies.get('token')?.value || ''
 
-  if (isPublicPath && token && path !== '/') {
-    return NextResponse.redirect(new URL('/', request.nextUrl))
+
+  //  Block PUBLIC routes
+  // ---------------------------------------
+  if (token && isPublicPath) {
+    return NextResponse.redirect(new URL('/play', request.url))
   }
 
-  if (!isPublicPath && !token) {
-    return NextResponse.redirect(new URL('/login', request.nextUrl))
+  //  Block PRIVATE routes
+  // ---------------------------------------
+  if (!token && !isPublicPath) {
+    return NextResponse.redirect(new URL('/login', request.url))
   }
 
   return NextResponse.next()
@@ -20,10 +31,12 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/',
-    '/profile',
+    '/',    
     '/login',
     '/signup',
-    '/verifyemail'
+    '/verifyemail',
+    '/profile',
+    '/play',
+    '/leaderboard',
   ]
 }
