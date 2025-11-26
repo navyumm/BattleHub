@@ -149,7 +149,7 @@ export default function PlayPage() {
 
               {/* ===== Status Area ===== */}
               <div className="flex-[1] w-full flex items-center justify-center text-xs font-medium border-t border-gray-800 text-gray-400">
-                {loading ? "Loading..." : hasTarget ? "Not Played" : "No Target"}
+                {loading ? "Loading..." : hasTarget ? "Not Played" : ""}
               </div>
             </div>
           );
