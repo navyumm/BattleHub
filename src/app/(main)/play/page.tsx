@@ -74,7 +74,7 @@ export default function PlayPage() {
       </h1>
 
       {/* ===== Month Navigation ===== */}
-      <div className="flex items-center justify-center gap-6 mb-10">
+      {/* <div className="flex items-center justify-center gap-6 mb-10">
         <button
           onClick={() => setCurrentMonth(currentMonth.subtract(1, "month"))}
           className="text-2xl text-gray-400 hover:text-white transition border px-3 cursor-pointer hover:scale-105"
@@ -92,7 +92,7 @@ export default function PlayPage() {
         >
           ›
         </button>
-      </div>
+      </div> */}
 
       {/* ===== Calendar Grid ===== */}
       <div className="grid grid-cols-7 gap-4 w-full max-w-5xl">
