@@ -18,7 +18,7 @@ export default function LoginPage() {
       toast.success("Login successful 🎉");
       router.push("/play");
     } catch (error: any) {
-      toast.error(error.message || "Login failed");
+      toast.error( "please verify your OTP first");
     } finally {
       setLoading(false);
     }
