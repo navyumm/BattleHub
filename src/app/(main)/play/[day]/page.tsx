@@ -41,26 +41,42 @@ div {
     toast.success(`${color} copied!`);
   };
 
-  const handleCheckMatch = async () => {
-    try {
-      const iframe = document.querySelector("iframe");
-      if (!iframe?.contentDocument?.body) {
-        toast.error("Preview not ready");
-        return;
-      }
+ const handleCheckMatch = async () => {
+  try {
+    const iframe = document.querySelector("iframe");
 
-      const canvas = await html2canvas(iframe.contentDocument.body, {
-        backgroundColor: null,
-      });
-      const previewImage = canvas.toDataURL("image/png");
-      const similarity = await compareImages(targetImg, previewImage);
-      setMatchScore(similarity);
-      toast.success(`Image matched ${similarity}%`);
-    } catch (err) {
-      console.error(err);
-      toast.error("Comparison failed");
+    if (!iframe?.contentDocument?.body) {
+      toast.error("Preview not ready");
+      return;
     }
-  };
+
+    const canvas = await html2canvas(iframe.contentDocument.body, {
+      backgroundColor: null,
+    });
+
+    const previewImage = canvas.toDataURL("image/png");
+
+    const similarity = await compareImages(targetImg, previewImage);
+    setMatchScore(similarity);
+
+    await fetch("/api/score/save", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        day: dayParam,
+        score: similarity,
+      }),
+    });
+
+    toast.success(`Image matched ${similarity}%`);
+  } catch (err) {
+    console.error(err);
+    toast.error("Comparison failed");
+  }
+};
+
 
   useEffect(() => {
     // Fetch dynamic palette for target image

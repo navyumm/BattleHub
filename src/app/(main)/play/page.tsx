@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { getUserScores } from "@/helpers/getUserScores";
 import dayjs from "dayjs";
 
 export default function PlayPage() {
@@ -10,6 +11,7 @@ export default function PlayPage() {
   const [currentMonth, setCurrentMonth] = useState(dayjs());
   const [availableTargets, setAvailableTargets] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
+  const [userScores, setUserScores] = useState<Record<number, number>>({});
 
   // Cache for already loaded months (useRef so it doesn't cause re-render)
   const cacheRef = useRef<Record<string, Record<number, string>>>({});
@@ -65,6 +67,15 @@ export default function PlayPage() {
 
     loadMonthTargets();
   }, [monthKey, monthAbbr, daysInMonth]);
+
+  useEffect(() => {
+  const loadScores = async () => {
+    const dbScores = await getUserScores();
+    setUserScores(dbScores);
+  };
+  loadScores();
+}, []);
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-[#120019] to-[#000000] text-white flex flex-col items-center pt-28 pb-10 px-6">
@@ -149,7 +160,17 @@ export default function PlayPage() {
 
               {/* ===== Status Area ===== */}
               <div className="flex-[1] w-full flex items-center justify-center text-xs font-medium border-t border-gray-800 text-gray-400">
-                {loading ? "Loading..." : hasTarget ? "Not Played" : ""}
+                {loading ? (
+                  "Loading..."
+                ) : hasTarget ? (
+                  userScores[day] !== undefined ? (
+                    `Score: ${userScores[day]}%`
+                  ) : (
+                    "Not Played"
+                  )
+                ) : (
+                  ""
+                )}
               </div>
             </div>
           );
