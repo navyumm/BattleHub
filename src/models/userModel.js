@@ -31,8 +31,16 @@ const userSchema = new mongoose.Schema({
 
   verifyOTP: String,
   verifyOTPExpiry: Date,
+
+   scores: [
+    {
+      day: String,
+      score: Number,
+      date: Date,
+    }
+  ]
 });
 
-const User = mongoose.models.users || mongoose.model("users", userSchema);
+const User = mongoose.models.User || mongoose.model("User", userSchema);
 
 export default User;
