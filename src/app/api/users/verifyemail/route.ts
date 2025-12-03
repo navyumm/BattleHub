@@ -2,6 +2,7 @@ import { connect } from "@/dbConfig/dbConfig";
 import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/userModel";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
 connect();
 
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Find ALL users whose OTP is not expired
+    // Find users with non-expired OTP
     const users = await User.find({
       verifyOTPExpiry: { $gt: Date.now() },
     });
@@ -28,9 +29,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let matchedUser = null;
+    let matchedUser: any = null;
 
-    // Compare OTP with each user's hashed OTP
+    // Match OTP
     for (const u of users) {
       const match = await bcrypt.compare(otp.toString(), u.verifyOTP);
       if (match) {
@@ -46,16 +47,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mark user as verified
     matchedUser.isVerified = true;
     matchedUser.verifyOTP = undefined;
     matchedUser.verifyOTPExpiry = undefined;
     await matchedUser.save();
 
-    return NextResponse.json({
-      success: true,
-      message: "Email verified successfully",
+    const tokenData = {
+      id: matchedUser._id,
+      username: matchedUser.username,
+      email: matchedUser.email,
+    };
+
+    const token = jwt.sign(tokenData, process.env.TOKEN_SECRET!, {
+      expiresIn: "7d",
     });
+
+    const response = NextResponse.json({
+      success: true,
+      message: "OTP verified, login successful",
+    });
+
+    response.cookies.set("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60, // 7 days
+    });
+
+    return response;
 
   } catch (error: any) {
     console.log("VERIFY ERROR:", error);
