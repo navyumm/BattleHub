@@ -1,4 +1,3 @@
-// src/app/api/leaderboard/route.ts
 import { NextResponse } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
 import User from "@/models/userModel";
@@ -16,19 +15,26 @@ export async function GET(req: Request) {
     const limit = parseInt(searchParams.get("limit") || "10");
 
     const users = await User.find({})
-      .sort({ score: -1, createdAt: 1 })
-      .limit(limit)
-      .select("username email score isVerified createdAt")
+      .select("username email scores isVerified createdAt")
       .lean();
 
-    const formattedUsers = users.map((u: any) => ({
-      _id: String(u._id),
-      username: u.username,
-      email: u.email,
-      score: u.score ?? 0,
-      isVerified: !!u.isVerified,
-      createdAt: u.createdAt?.toISOString() || null,
-    }));
+    const formattedUsers = users
+      .map((u: any) => {
+        const totalScore = Array.isArray(u.scores)
+          ? u.scores.reduce((sum: any, s: { score: any; }) => sum + (s.score || 0), 0)
+          : 0;
+
+        return {
+          _id: String(u._id),
+          username: u.username,
+          email: u.email,
+          score: totalScore,
+          isVerified: !!u.isVerified,
+          createdAt: u.createdAt?.toISOString() || null,
+        };
+      })
+      .sort((a, b) => b.score - a.score) // highest first
+      .slice(0, limit);
 
     return NextResponse.json({ success: true, data: formattedUsers }, { status: 200 });
   } catch (error) {
