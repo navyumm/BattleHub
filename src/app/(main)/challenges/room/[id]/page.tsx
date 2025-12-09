@@ -1,6 +1,6 @@
 // src/app/challenges/room/[id]/page.tsx
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type Player = { id: string; username: string; joinedAt?: string; score?: number | null };
@@ -12,10 +12,14 @@ export default function RoomPage() {
   const [started, setStarted] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
 
+  // guard so join POST runs only once (prevents StrictMode double-run)
+  const joinedRef = useRef(false);
+
   // Join room on mount and use server response to update UI immediately
   useEffect(() => {
     if (!id) return;
-    let mounted = true;
+    if (joinedRef.current) return;
+    joinedRef.current = true;
 
     setLoadingJoin(true);
     fetch("/api/challenge/join", {
@@ -25,40 +29,43 @@ export default function RoomPage() {
     })
       .then((r) => r.json())
       .then((data) => {
-        if (!mounted) return;
         if (data?.success && data.room) {
+          // use server returned players so we don't wait for first poll
           setPlayers(data.room.players || []);
-          setStarted(data.room.meta?.started || false);
-          // If started is true, immediately go to play
-          if (data.room.meta?.started) router.push(`/challenges/play/${id}`);
+          setStarted(!!data.room.meta?.started || !!data.room.started);
+          if (data.room.meta?.started || data.room.started) {
+            router.push(`/challenges/play/${id}`);
+          }
         }
       })
       .catch((e) => console.error("join error", e))
       .finally(() => setLoadingJoin(false));
-
-    return () => {
-      mounted = false;
-    };
   }, [id, router]);
 
-  // Poll room state
+  // Poll room state regularly
   useEffect(() => {
     if (!id) return;
-    const t = setInterval(async () => {
+
+    const poll = async () => {
       try {
         const res = await fetch(`/api/challenge/room/${id}`);
+        if (!res.ok) return;
         const data = await res.json();
-        if (data?.room) {
+        if (data.room) {
           setPlayers(data.room.players || []);
-          setStarted(data.room.meta?.started || false);
-          if (data.room.meta?.started) router.push(`/challenges/play/${id}`);
+          setStarted(data.room.started || false);
+          if (data.room.started) {
+            router.push(`/challenges/play/${id}`);
+          }
         }
       } catch (err) {
-        console.error("poll error", err);
+        console.error("Polling error:", err);
       }
-    }, 1200);
+    };
 
-    return () => clearInterval(t);
+    poll(); // immediate poll (fixes not updating until refresh)
+    const interval = setInterval(poll, 1200);
+    return () => clearInterval(interval);
   }, [id, router]);
 
   const startGame = async () => {
@@ -70,7 +77,6 @@ export default function RoomPage() {
       });
       const data = await res.json();
       if (data?.success) {
-        // immediate redirect
         router.push(`/challenges/play/${id}`);
       } else {
         console.error("start failed", data);
