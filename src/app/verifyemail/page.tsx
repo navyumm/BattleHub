@@ -12,7 +12,8 @@ export default function VerifyEmailPage() {
   const [error, setError] = useState("");
 
   const router = useRouter();
-  const inputs = useRef<any>([]);
+  // typed ref: array of HTMLInputElement or null
+  const inputs = useRef<Array<HTMLInputElement | null>>([]);
 
   const verifyOtp = async () => {
     try {
@@ -25,7 +26,7 @@ export default function VerifyEmailPage() {
 
       if (response.data.success) {
         toast.success("OTP Verified Successfully!");
-        router.push("/play"); 
+        router.push("/play");
       } else {
         setError("Invalid OTP! Please try again");
       }
@@ -53,21 +54,26 @@ export default function VerifyEmailPage() {
           {otp.map((digit, index) => (
             <input
               key={index}
-              // ref={(el) => (inputs.current[index] = el)}
+              // properly assign ref without returning a value
+              ref={(el) => { inputs.current[index] = el; }}
               value={digit}
               onChange={(e) => {
                 if (!/^[0-9]$/.test(e.target.value) && e.target.value !== "") return;
                 const newOtp = [...otp];
                 newOtp[index] = e.target.value;
                 setOtp(newOtp);
-                if (e.target.value && index < 5) inputs.current[index + 1].focus();
+                // use optional chaining — focus only if the element exists
+                if (e.target.value && index < 5) {
+                  inputs.current[index + 1]?.focus();
+                }
               }}
               onKeyDown={(e) => {
                 if (e.key === "Backspace" && !otp[index] && index > 0) {
-                  inputs.current[index - 1].focus();
+                  inputs.current[index - 1]?.focus();
                 }
               }}
               maxLength={1}
+              inputMode="numeric"
               className="w-12 h-14 text-center text-2xl font-bold rounded-xl 
               bg-[#1a0025] border border-purple-600/30 
               focus:border-orange-500 focus:ring-2 focus:ring-orange-500 
