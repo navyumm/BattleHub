@@ -11,50 +11,85 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const roomId = (body.roomId || "").trim();
+
     if (!roomId) {
-      return NextResponse.json({ success: false, message: "roomId required" }, { status: 400 });
+      return NextResponse.json(
+        { success: false, message: "roomId required" },
+        { status: 400 }
+      );
     }
 
+    // Get logged user ID from token
     const userId = await getDataFromToken(req as any);
     if (!userId) {
-      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+      return NextResponse.json(
+        { success: false, message: "Unauthorized" },
+        { status: 401 }
+      );
     }
 
-    // fetch username from users collection
-    // cast to any to avoid TypeScript issues when your model is plain JS
-    const user: any = await User.findById(userId).select("username").lean();
-    const username = user?.username || `user-${String(userId).slice(-4)}`;
+    // Fetch username from DB
+    const user: any = await User.findById(userId)
+      .select("username")
+      .lean();
 
-    // Try to find a room
+    const username =
+      user?.username || `user-${String(userId).slice(-4)}`;
+
+    // Find existing room
     let room = await Room.findOne({ roomId });
 
     if (!room) {
-      // Room doesn't exist: create it + add player
+      // ROOM DOES NOT EXIST → Create new room
       room = await Room.create({
         roomId,
         ownerId: String(userId),
-        players: [{ id: String(userId), username, joinedAt: new Date() }],
+        players: [
+          {
+            id: String(userId),
+            username,
+            joinedAt: new Date(),
+          },
+        ],
         started: false,
+        challenge: null,
       });
     } else {
-      // Room exists: atomically add player only if not present.
-      // This avoids race conditions that can insert same id twice.
-      const addResult = await Room.updateOne(
-        { roomId, "players.id": { $ne: String(userId) } }, // filter ensures player id not present
+      // ROOM EXISTS → Add player only if not already added
+      await Room.updateOne(
+        {
+          roomId,
+          "players.id": { $ne: String(userId) },
+        },
         {
           $push: {
-            players: { id: String(userId), username, joinedAt: new Date() },
+            players: {
+              id: String(userId),
+              username,
+              joinedAt: new Date(),
+            },
           },
         }
       );
 
-      // If we updated (nModified may be 1) or not, fetch the fresh room state
+      // Fetch updated room
       room = await Room.findOne({ roomId }).lean();
     }
 
-    return NextResponse.json({ success: true, room }, { status: 200 });
+    // RETURN room + logged userId
+    return NextResponse.json(
+      {
+        success: true,
+        room,
+        userId: String(userId), // ⭐ IMPORTANT
+      },
+      { status: 200 }
+    );
   } catch (err) {
     console.error("join room error", err);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: "Server error" },
+      { status: 500 }
+    );
   }
 }

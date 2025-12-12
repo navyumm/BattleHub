@@ -5,7 +5,14 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { getUserScores } from "@/helpers/getUserScores";
 import dayjs from "dayjs";
 
-export default function PlayPage() {
+interface PlayPageProps {
+  onSelectChallenge?: (day: number, image: string) => void; // Only host uses this
+  day?: number
+  isRoomMode?: boolean; 
+  roomId?: string | string[]; 
+}
+
+export default function PlayPage({ onSelectChallenge, isRoomMode, roomId, day }: PlayPageProps) {
   const router = useRouter();
 
   const [currentMonth, setCurrentMonth] = useState(dayjs());
@@ -13,27 +20,42 @@ export default function PlayPage() {
   const [loading, setLoading] = useState(false);
   const [userScores, setUserScores] = useState<Record<number, number>>({});
 
-  // Cache for already loaded months (useRef so it doesn't cause re-render)
   const cacheRef = useRef<Record<string, Record<number, string>>>({});
 
-  const monthKey = useMemo(
-    () => currentMonth.format("YYYY-MM"),
-    [currentMonth]
-  );
-  const monthAbbr = useMemo(
-    () => currentMonth.format("MMM").toLowerCase(),
-    [currentMonth]
-  );
+  const monthKey = useMemo(() => currentMonth.format("YYYY-MM"), [currentMonth]);
+  const monthAbbr = useMemo(() => currentMonth.format("MMM").toLowerCase(), [currentMonth]);
   const daysInMonth = currentMonth.daysInMonth();
   const firstDay = currentMonth.startOf("month").day();
 
+  // -----------------------------
+  // MAIN CLICK HANDLER
+  // -----------------------------
   const handleDayClick = useCallback(
     (day: number) => {
-      if (availableTargets[day]) router.push(`/play/${day}`);
+      const img = availableTargets[day];
+      if (!img) return;
+
+      // 1) HOST selecting challenge
+      if (onSelectChallenge) {
+        onSelectChallenge(day, img);
+        return;
+      }
+
+      // 2) ROOM MODE → redirect to multiplayer play page
+      if (isRoomMode && roomId) {
+        router.push(`/challenges/play/${roomId}`);
+        return;
+      }
+
+      // 3) NORMAL single player
+      router.push(`/play/${day}`);
     },
-    [router, availableTargets]
+    [availableTargets, onSelectChallenge, isRoomMode, roomId, router]
   );
 
+  // -----------------------------
+  // Load images for month
+  // -----------------------------
   useEffect(() => {
     if (cacheRef.current[monthKey]) {
       setAvailableTargets(cacheRef.current[monthKey]);
@@ -45,21 +67,18 @@ export default function PlayPage() {
       setLoading(true);
       const targets: Record<number, string> = {};
 
-      // Use Promise.all for parallel fetches (faster)
       await Promise.all(
         Array.from({ length: daysInMonth }, async (_, i) => {
           const day = i + 1;
           const imgSrc = `/${monthAbbr}-${day}.png`;
+
           try {
             const res = await fetch(imgSrc, { method: "HEAD" });
             if (res.ok) targets[day] = imgSrc;
-          } catch {
-            /* ignore */
-          }
+          } catch {}
         })
       );
 
-      // Save to cache
       cacheRef.current[monthKey] = targets;
       setAvailableTargets(targets);
       setLoading(false);
@@ -68,46 +87,26 @@ export default function PlayPage() {
     loadMonthTargets();
   }, [monthKey, monthAbbr, daysInMonth]);
 
+  // -----------------------------
+  // Load scores
+  // -----------------------------
   useEffect(() => {
-  const loadScores = async () => {
-    const dbScores = await getUserScores();
-    setUserScores(dbScores);
-  };
-  loadScores();
-}, []);
-
+    const loadScores = async () => {
+      const dbScores = await getUserScores();
+      setUserScores(dbScores);
+    };
+    loadScores();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-[#120019] to-[#000000] text-white flex flex-col items-center pt-28 pb-10 px-6">
-      {/* ===== Header ===== */}
+
       <h1 className="text-3xl font-bold mb-6 text-center">
         Daily CSS Challenges
       </h1>
 
-      {/* ===== Month Navigation ===== */}
-      {/* <div className="flex items-center justify-center gap-6 mb-10">
-        <button
-          onClick={() => setCurrentMonth(currentMonth.subtract(1, "month"))}
-          className="text-2xl text-gray-400 hover:text-white transition border px-3 cursor-pointer hover:scale-105"
-        >
-          ‹
-        </button>
-
-        <h2 className="text-2xl font-semibold text-purple-400">
-          {currentMonth.format("MMMM YYYY")}
-        </h2>
-
-        <button
-          onClick={() => setCurrentMonth(currentMonth.add(1, "month"))}
-          className="text-2xl text-gray-400 hover:text-white transition border px-3 cursor-pointer hover:scale-105"
-        >
-          ›
-        </button>
-      </div> */}
-
-      {/* ===== Calendar Grid ===== */}
       <div className="grid grid-cols-7 gap-4 w-full max-w-5xl">
-        {/* Weekday Headings */}
+
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div
             key={d}
@@ -117,12 +116,10 @@ export default function PlayPage() {
           </div>
         ))}
 
-        {/* Empty slots before month start */}
         {Array.from({ length: firstDay }).map((_, i) => (
           <div key={`empty-${i}`} />
         ))}
 
-        {/* Day Cells */}
         {Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1;
           const imgSrc = availableTargets[day];
@@ -138,12 +135,10 @@ export default function PlayPage() {
                   : "opacity-40 cursor-not-allowed"
               }`}
             >
-              {/* ===== Date (top-right) ===== */}
               <span className="absolute top-2 right-2 text-xs text-gray-400 transition-opacity duration-300 group-hover:opacity-0">
                 {day}
               </span>
 
-              {/* ===== Image Area ===== */}
               <div className="flex items-center justify-center flex-[3]">
                 {loading ? (
                   <div className="w-[60%] h-[60%] bg-gray-800 animate-pulse rounded-md" />
@@ -158,19 +153,14 @@ export default function PlayPage() {
                 )}
               </div>
 
-              {/* ===== Status Area ===== */}
               <div className="flex-[1] w-full flex items-center justify-center text-xs font-medium border-t border-gray-800 text-gray-400">
-                {loading ? (
-                  "Loading..."
-                ) : hasTarget ? (
-                  userScores[day] !== undefined ? (
-                    `Score: ${userScores[day]}%`
-                  ) : (
-                    "Not Played"
-                  )
-                ) : (
-                  ""
-                )}
+                {loading
+                  ? "Loading..."
+                  : hasTarget
+                  ? userScores[day] !== undefined
+                    ? `Score: ${userScores[day]}%`
+                    : "Not Played"
+                  : ""}
               </div>
             </div>
           );
