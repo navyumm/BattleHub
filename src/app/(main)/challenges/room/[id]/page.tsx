@@ -57,7 +57,11 @@ useEffect(() => {
         setRoom(data.room);
 
         if (data.room.started && data.room.challenge?.day) {
-          router.push(`/play/${data.room.challenge.day}`);
+          // router.push(`/play/${data.room.challenge.day}`);
+          // router.push(`/challenges/room/${id}/play`);
+          // router.push(`/challenges/play/${id}`);
+          router.push(`/play/${data.room.challenge.day}?roomId=${id}`);
+
         }
       }
     } catch (err) {

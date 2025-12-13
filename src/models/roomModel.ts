@@ -30,10 +30,9 @@ const RoomSchema = new Schema(
       index: true,
       unique: true,
     },
-
+    
     ownerId: {
       type: String,
-      required: true,
     },
 
     players: {
@@ -44,11 +43,6 @@ const RoomSchema = new Schema(
     started: {
       type: Boolean,
       default: false,
-    },
-
-    challengeDay: {
-      type: Number,
-      default: null,
     },
 
     createdAt: {
