@@ -1,6 +1,6 @@
 // src/app/challenges/room/[id]/page.tsx
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
 type Player = { id: string; username: string; joinedAt?: string; score?: number | null };
@@ -11,16 +11,12 @@ export default function RoomPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [started, setStarted] = useState(false);
   const [loadingJoin, setLoadingJoin] = useState(false);
-
-  // guard so join POST runs only once (prevents StrictMode double-run)
-  const joinedRef = useRef(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Join room on mount and use server response to update UI immediately
   useEffect(() => {
     if (!id) return;
-    if (joinedRef.current) return;
-    joinedRef.current = true;
-
+    let mounted = true;
     setLoadingJoin(true);
     fetch("/api/challenge/join", {
       method: "POST",
@@ -29,47 +25,64 @@ export default function RoomPage() {
     })
       .then((r) => r.json())
       .then((data) => {
+        if (!mounted) return;
         if (data?.success && data.room) {
-          // use server returned players so we don't wait for first poll
-          setPlayers(data.room.players || []);
-          setStarted(!!data.room.meta?.started || !!data.room.started);
-          if (data.room.meta?.started || data.room.started) {
-            router.push(`/challenges/play/${id}`);
-          }
+          const uniq = Array.isArray(data.room.players) ? data.room.players : [];
+          const uniquePlayers = uniq.filter((p: any, idx: number, arr: any[]) => arr.findIndex(x => x.id === p.id) === idx);
+          setPlayers(uniquePlayers);
+          setStarted(Boolean(data.room.started));
+          if (data.room.started) router.push(`/challenges/play/${id}`);
+        } else if (data && !data.success) {
+          setError(data.message || "Join failed");
         }
       })
-      .catch((e) => console.error("join error", e))
+      .catch((e) => {
+        console.error("join error", e);
+        setError("Failed to join room");
+      })
       .finally(() => setLoadingJoin(false));
+
+    return () => {
+      mounted = false;
+    };
   }, [id, router]);
 
-  // Poll room state regularly
+  // Poll room state
   useEffect(() => {
     if (!id) return;
 
     const poll = async () => {
       try {
         const res = await fetch(`/api/challenge/room/${id}`);
-        if (!res.ok) return;
         const data = await res.json();
-        if (data.room) {
-          setPlayers(data.room.players || []);
-          setStarted(data.room.started || false);
-          if (data.room.started) {
+        if (data?.room) {
+          const uniq = Array.isArray(data.room.players) ? data.room.players : [];
+          const uniquePlayers = uniq.filter((p: any, idx: number, arr: any[]) => arr.findIndex(x => x.id === p.id) === idx);
+          setPlayers(uniquePlayers);
+          const startedNow = !!data.room.started;
+          setStarted(startedNow);
+          if (startedNow) {
             router.push(`/challenges/play/${id}`);
           }
+        } else if (data && !data.success) {
+          // room deleted or not found, you can redirect
+          setError(data.message || "Room not found");
         }
       } catch (err) {
         console.error("Polling error:", err);
       }
     };
 
-    poll(); // immediate poll (fixes not updating until refresh)
+    poll(); // immediate run
     const interval = setInterval(poll, 1200);
     return () => clearInterval(interval);
   }, [id, router]);
 
   const startGame = async () => {
+    setError(null);
     try {
+      // If you want the host to choose a challenge, open a select UI and pass challenge in body.
+      // For now we'll just call start without challenge metadata.
       const res = await fetch("/api/challenge/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -77,12 +90,15 @@ export default function RoomPage() {
       });
       const data = await res.json();
       if (data?.success) {
+        // navigate immediately (server updated room.started = true)
         router.push(`/challenges/play/${id}`);
       } else {
         console.error("start failed", data);
+        setError(data?.message || "Failed to start challenge");
       }
     } catch (err) {
       console.error("start error", err);
+      setError("Failed to start challenge");
     }
   };
 
@@ -96,11 +112,15 @@ export default function RoomPage() {
         <div className="flex flex-col gap-3 mb-4">
           {players.map((p) => (
             <div key={p.id} className="px-4 py-3 bg-[#111] rounded-lg border border-purple-500/20 text-lg">
-              {p.username}
-              {typeof p.score === "number" && <span className="ml-3 text-sm text-gray-300">Score: {p.score}%</span>}
+              <div className="flex justify-between items-center">
+                <div>{p.username}</div>
+                {typeof p.score === "number" && <div className="text-sm text-gray-300">Score: {p.score}%</div>}
+              </div>
             </div>
           ))}
         </div>
+
+        {error && <div className="text-red-400 text-sm mb-3">{error}</div>}
 
         {players.length < 2 ? (
           <p className="text-gray-400 text-sm mt-4 text-center">Waiting for more players...</p>
@@ -109,16 +129,16 @@ export default function RoomPage() {
         )}
 
         <div className="mt-6">
-          {players.length >= 2 ? (
+          {players.length >= 2 && !started ? (
             <button
               onClick={startGame}
-              className="w-full py-3 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl text-lg font-semibold hover:scale-105 transition-all"
+              className="w-full mt-6 py-3 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl text-lg font-semibold hover:scale-105 transition-all"
             >
-              Start Challenge
+              Select & Start Challenge
             </button>
           ) : (
             <button className="w-full py-3 bg-gray-600 rounded-xl text-lg font-semibold" disabled>
-              Waiting for players...
+              {started ? "Challenge started..." : "Waiting for players..."}
             </button>
           )}
         </div>

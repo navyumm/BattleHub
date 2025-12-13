@@ -8,6 +8,8 @@ export default function ComparePreview({
   code: string;
   targetImage: string;
 }) {
+  const hasImage = targetImage && targetImage.trim() !== "";
+
   return (
     <div className="w-full h-full">
       <ReactCompareSlider
@@ -19,11 +21,17 @@ export default function ComparePreview({
           />
         }
         itemTwo={
-          <img
-            src={targetImage}
-            alt="Target"
-            className="w-full h-full object-contain"
-          />
+          hasImage ? (
+            <img
+              src={targetImage}
+              alt="Target"
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-gray-400">
+              Loading target…
+            </div>
+          )
         }
         position={50}
         changePositionOnHover={true}
