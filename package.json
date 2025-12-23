@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "socket": "ts-node socket-server.ts",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
@@ -27,7 +28,9 @@
     "react-compare-slider": "^3.1.0",
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",
-    "resemblejs": "^5.0.0"
+    "resemblejs": "^5.0.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
@@ -35,7 +38,7 @@
     "@types/bcryptjs": "^2.4.6",
     "@types/colorthief": "^2.6.0",
     "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^20",
+    "@types/node": "^20.19.27",
     "@types/nodemailer": "^7.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -44,6 +47,7 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }

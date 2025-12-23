@@ -1,50 +1,57 @@
-// src/app/api/challenge/room/[id]/route.ts
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
 import Room from "@/models/roomModel";
+import User from "@/models/userModel";
+import { getDataFromToken } from "@/helpers/getDataFromToken";
+import { io } from "../../../../../../socket-server"; // path adjust if needed
 
 await connect();
 
-export async function GET(req: NextRequest, { params }: { params?: { id?: string } } = {}) {
+export async function POST(req: Request) {
   try {
-    // robust id extraction: prefer params, fallback to parsing the URL
-    let id = params?.id;
-    if (!id) {
-      try {
-        const u = new URL(req.url);
-        const parts = u.pathname.split("/");
-        id = parts[parts.length - 1] || undefined;
-      } catch (e) {
-        // ignore - will error below if id missing
+    const { roomId } = await req.json();
+    if (!roomId) {
+      return NextResponse.json({ success: false }, { status: 400 });
+    }
+
+    const userId = await getDataFromToken(req as any);
+    if (!userId) {
+      return NextResponse.json({ success: false }, { status: 401 });
+    }
+
+    const user = (await User.findById(userId)
+      .select("username")
+      .lean()) as any;
+
+    const username = user?.username ?? "Player";
+
+    let room = await Room.findOne({ roomId });
+
+    if (!room) {
+      room = await Room.create({
+        roomId,
+        players: [{ id: String(userId), username }],
+        started: false,
+      });
+    } else {
+      const exists = room.players.some(
+        (p: any) => p.id === String(userId)
+      );
+      if (!exists) {
+        room.players.push({ id: String(userId), username });
+        await room.save();
       }
     }
 
-    if (!id) {
-      return NextResponse.json({ success: false, message: "roomId required" }, { status: 400 });
-    }
+    // 🔥 SOCKET EVENT
+    io.to(roomId).emit("room:update", {
+      players: room.players,
+      started: room.started,
+    });
 
-    const room: any = await Room.findOne({ roomId: id }).lean();
-    if (!room) {
-      return NextResponse.json({ success: false, message: "Room not found" }, { status: 404 });
-    }
-
-    // ensure players array is present and unique by id (dedupe)
-    const players = Array.isArray(room.players)
-      ? room.players.filter((p: any, idx: number, arr: any[]) => arr.findIndex(x => x.id === p.id) === idx)
-      : [];
-
-    return NextResponse.json({
-      success: true,
-      room: {
-        roomId: room.roomId,
-        ownerId: room.ownerId,
-        players,
-        started: !!room.started,
-        challenge: room.challenge || null,
-      },
-    }, { status: 200 });
-  } catch (err) {
-    console.error("room get error:", err);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    return NextResponse.json({ success: true, room });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }
