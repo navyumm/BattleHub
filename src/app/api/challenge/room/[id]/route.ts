@@ -1,26 +1,57 @@
-// src/app/api/challenge/room/[id]/route.ts
 import { NextResponse } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
 import Room from "@/models/roomModel";
+import User from "@/models/userModel";
+import { getDataFromToken } from "@/helpers/getDataFromToken";
+import { io } from "../../../../../../socket-server"; // path adjust if needed
 
 await connect();
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function POST(req: Request) {
   try {
-    const url = new URL(req.url);
-    // Next's route handler in App Router passes params separately - but when using dynamic route file
-    // sometimes you can extract id from req.url; we'll try both for safety:
-    const match = req.url.match(/\/api\/challenge\/room\/([^/?]+)/);
-    const roomId = (match && match[1]) || (params?.id) || url.pathname.split("/").pop();
+    const { roomId } = await req.json();
+    if (!roomId) {
+      return NextResponse.json({ success: false }, { status: 400 });
+    }
 
-    if (!roomId) return NextResponse.json({ success: false, message: "roomId missing" }, { status: 400 });
+    const userId = await getDataFromToken(req as any);
+    if (!userId) {
+      return NextResponse.json({ success: false }, { status: 401 });
+    }
 
-    const room = await Room.findOne({ roomId }).lean();
-    if (!room) return NextResponse.json({ success: true, room: null }, { status: 200 });
+    const user = (await User.findById(userId)
+      .select("username")
+      .lean()) as any;
 
-    return NextResponse.json({ success: true, room }, { status: 200 });
-  } catch (err) {
-    console.error("room get error", err);
-    return NextResponse.json({ success: false, message: "Server error" }, { status: 500 });
+    const username = user?.username ?? "Player";
+
+    let room = await Room.findOne({ roomId });
+
+    if (!room) {
+      room = await Room.create({
+        roomId,
+        players: [{ id: String(userId), username }],
+        started: false,
+      });
+    } else {
+      const exists = room.players.some(
+        (p: any) => p.id === String(userId)
+      );
+      if (!exists) {
+        room.players.push({ id: String(userId), username });
+        await room.save();
+      }
+    }
+
+    // 🔥 SOCKET EVENT
+    io.to(roomId).emit("room:update", {
+      players: room.players,
+      started: room.started,
+    });
+
+    return NextResponse.json({ success: true, room });
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }
