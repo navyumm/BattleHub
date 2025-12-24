@@ -1,11 +1,15 @@
-// src/app/challenges/room/[id]/page.tsx
 "use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { io, Socket } from "socket.io-client";
 import PlayPage from "@/app/(main)/play/page";
 
-type Player = { id: string; username: string; score?: number | null };
+type Player = {
+  id: string;
+  username: string;
+  score?: number | null;
+};
 
 export default function RoomPage() {
   const { id } = useParams();
@@ -16,113 +20,116 @@ export default function RoomPage() {
   const [loggedUserId, setLoggedUserId] = useState<string | null>(null);
 
   const joinedRef = useRef(false);
+  const socketRef = useRef<Socket | null>(null);
 
-  // JOIN ROOM
-useEffect(() => {
-  if (!id || joinedRef.current) return;
-  joinedRef.current = true;
+  /* -------------------------------- JOIN ROOM -------------------------------- */
+  useEffect(() => {
+    if (!id || joinedRef.current) return;
+    joinedRef.current = true;
 
-  fetch("/api/challenge/join", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ roomId: id }),
-  })
-    .then((res) => res.json())
-    .then((data) => {
-      if (data.success && data.room) {
+    fetch("/api/challenge/join", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: id }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.success || !data.room) return;
+
         setPlayers(data.room.players);
         setRoom(data.room);
         setLoggedUserId(String(data.userId));
 
         if (data.room.started && data.room.challenge?.day) {
-          router.push(`/challenges/play/${data.room.challenge.day}`);
+          router.push(`/play/${data.room.challenge.day}?roomId=${id}`);
         }
-      }
-    })
-    .catch(console.error);
-}, [id, router]);
+      })
+      .catch(console.error);
+  }, [id, router]);
 
-
-  // POLLING ROOM STATE (every 1.2s)
+  /* ------------------------------- SOCKET SETUP ------------------------------- */
 useEffect(() => {
   if (!id) return;
 
-  const poll = async () => {
-    try {
-      const res = await fetch(`/api/challenge/room/${id}`);
-      const data = await res.json();
+  // 🔥 important: pehle server init
+  fetch("/api/socket").then(() => {
+    const socket = io({
+      path: "/api/socket",
+      transports: ["websocket"],
+    });
 
-      if (data.room) {
-        setPlayers(data.room.players);
-        setRoom(data.room);
+    socketRef.current = socket;
 
-        if (data.room.started && data.room.challenge?.day) {
-          // router.push(`/play/${data.room.challenge.day}`);
-          // router.push(`/challenges/room/${id}/play`);
-          // router.push(`/challenges/play/${id}`);
-          router.push(`/play/${data.room.challenge.day}?roomId=${id}`);
+    socket.on("connect", () => {
+      console.log("SOCKET CONNECTED:", socket.id);
+      socket.emit("join-room", id);
+    });
 
-        }
-      }
-    } catch (err) {
-      console.error("poll error", err);
-    }
+    socket.on("challenge-started", ({ day }) => {
+      router.push(`/play/${day}?roomId=${id}`);
+    });
+  });
+
+  return () => {
+    socketRef.current?.disconnect();
   };
+}, [id]);
 
-  poll();
-  const interval = setInterval(poll, 1200);
-  return () => clearInterval(interval);
-}, [id, router]);
-
-
+  /* -------------------------------- HOST CHECK -------------------------------- */
   const isHost =
     loggedUserId && room?.ownerId
       ? String(loggedUserId) === String(room.ownerId)
       : false;
 
-  // HOST selecting challenge
-  const handleSelectChallenge = async (day: number, image: string) => {
-    try {
-      const res = await fetch("/api/challenge/select", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roomId: id, day, image }),
-      });
+  /* --------------------------- HOST SELECT CHALLENGE --------------------------- */
+const handleSelectChallenge = async (day: number, image: string) => {
+  try {
+    const res = await fetch("/api/challenge/select", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roomId: id, day, image }),
+    });
 
-      const data = await res.json();
-      if (data.success) setRoom(data.room);
-    } catch (error) {
-      console.error("Select challenge error", error);
-    }
-  };
+    const data = await res.json();
+    if (!data.success) return;
 
+    router.push(`/play/${day}?roomId=${id}`);
+  } catch (error) {
+    console.error("Select challenge error:", error);
+  }
+};
+
+
+  /* ---------------------------------- UI ---------------------------------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-[#120019] to-black text-white flex flex-col items-center pt-24 px-6">
       <h1 className="text-3xl font-bold text-orange-400 mb-6 text-center">
         Room ID: {id}
       </h1>
 
-      {/* Players List */}
+      {/* Players */}
       <div className="bg-black/60 border border-purple-500/30 rounded-2xl p-8 w-full max-w-md mb-8">
-        <h2 className="text-xl font-semibold text-purple-300 mb-4">Players</h2>
+        <h2 className="text-xl font-semibold text-purple-300 mb-4">
+          Players
+        </h2>
 
-        {players?.map((p) => (
+        {players.map((player) => (
           <div
-            key={p.id}
+            key={player.id}
             className="px-4 py-3 bg-[#111] rounded-lg border border-purple-500/20 text-lg mb-2"
           >
-            {p.username}
+            {player.username}
           </div>
         ))}
       </div>
 
-      {/* HOST — SHOW PlayPage TO SELECT CHALLENGE */}
+      {/* HOST — SELECT CHALLENGE */}
       {!room?.challenge && isHost && (
         <PlayPage
-  onSelectChallenge={handleSelectChallenge}
-  isRoomMode={true}
-  roomId={id}
-/>
+          isRoomMode
+          roomId={id}
+          onSelectChallenge={handleSelectChallenge}
+        />
       )}
 
       {/* NON-HOST — WAITING */}
@@ -141,6 +148,7 @@ useEffect(() => {
 
           <img
             src={room.challenge.image}
+            alt="Challenge preview"
             className="w-full max-h-64 object-contain rounded-xl"
           />
         </div>

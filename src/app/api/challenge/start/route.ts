@@ -1,58 +1,36 @@
-import { NextResponse } from "next/server";
-import Room from "@/models/roomModel";
+import { NextRequest, NextResponse } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
+import Room from "@/models/roomModel";
+import { getDataFromToken } from "@/helpers/getDataFromToken";
+import { getIO } from "@/lib/socket";
 
 await connect();
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
-    const { roomId, day, month } = await req.json();
+    const { roomId } = await req.json();
+    const userId = await getDataFromToken(req);
 
-    if (!roomId || !day || !month) {
-      return NextResponse.json(
-        { success: false, message: "roomId, day & month required" },
-        { status: 400 }
-      );
+    const room = await Room.findOne({ roomId });
+    if (!room) {
+      return NextResponse.json({ success: false }, { status: 404 });
     }
 
-    const monthAbbr = month.toLowerCase(); // jan, feb, mar...
-
-    // IMPORTANT → public folder image path
-    const image = `/${monthAbbr}-${day}.png`;
-
-    const challenge = {
-      day,
-      month: monthAbbr,
-      image,
-    };
-
-    const updated = await Room.findOneAndUpdate(
-      { roomId },
-      {
-        challengeId: day,
-        challenge,
-        started: true,
-      },
-      { new: true }
-    );
-
-    if (!updated) {
-      return NextResponse.json(
-        { success: false, message: "Room not found" },
-        { status: 404 }
-      );
+    if (String(room.ownerId) !== String(userId)) {
+      return NextResponse.json({ success: false }, { status: 403 });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "Challenge selected",
-      challenge,
-      room: updated,
+    room.started = true;
+    await room.save();
+
+    const io = getIO();
+    io.to(roomId).emit("challenge-started", {
+      day: room.challenge.day,
     });
+
+    return NextResponse.json({ success: true });
   } catch (err) {
-    return NextResponse.json(
-      { success: false, message: "Server error", error: err },
-      { status: 500 }
-    );
+    console.error(err);
+    return NextResponse.json({ success: false }, { status: 500 });
   }
 }

@@ -6,7 +6,7 @@ import { getUserScores } from "@/helpers/getUserScores";
 import dayjs from "dayjs";
 
 interface PlayPageProps {
-  onSelectChallenge?: (day: number, image: string) => void; // Only host uses this
+  onSelectChallenge?: (day: number, image: string) => void; 
   day?: number
   isRoomMode?: boolean; 
   roomId?: string | string[]; 
@@ -30,28 +30,27 @@ export default function PlayPage({ onSelectChallenge, isRoomMode, roomId, day }:
   // -----------------------------
   // MAIN CLICK HANDLER
   // -----------------------------
-  const handleDayClick = useCallback(
-    (day: number) => {
-      const img = availableTargets[day];
-      if (!img) return;
+const handleDayClick = useCallback(
+  (day: number) => {
+    const img = availableTargets[day];
+    if (!img) return;
 
-      // 1) HOST selecting challenge
-      if (onSelectChallenge) {
-        onSelectChallenge(day, img);
-        return;
-      }
+    // ROOM MODE (host click)
+    if (isRoomMode && onSelectChallenge) {
+      onSelectChallenge(day, img);
+      return;
+    }
 
-      // 2) ROOM MODE → redirect to multiplayer play page
-      if (isRoomMode && roomId) {
-        router.push(`/challenges/play/${roomId}`);
-        return;
-      }
+    if (isRoomMode && roomId) {
+      router.push(`/play/${day}?roomId=${roomId}`);
+      return;
+    }
 
-      // 3) NORMAL single player
-      router.push(`/play/${day}`);
-    },
-    [availableTargets, onSelectChallenge, isRoomMode, roomId, router]
-  );
+    router.push(`/play/${day}`);
+  },
+  [availableTargets, isRoomMode, onSelectChallenge, roomId, router]
+);
+
 
   // -----------------------------
   // Load images for month

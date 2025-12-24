@@ -1,9 +1,9 @@
-// src/app/api/challenge/join/route.ts
 import { NextResponse } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
 import Room from "@/models/roomModel";
 import User from "@/models/userModel";
 import { getDataFromToken } from "@/helpers/getDataFromToken";
+import { getIO } from "@/lib/socket";
 
 await connect();
 
@@ -19,7 +19,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Get logged user ID from token
     const userId = await getDataFromToken(req as any);
     if (!userId) {
       return NextResponse.json(
@@ -28,7 +27,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Fetch username from DB
     const user: any = await User.findById(userId)
       .select("username")
       .lean();
@@ -36,52 +34,45 @@ export async function POST(req: Request) {
     const username =
       user?.username || `user-${String(userId).slice(-4)}`;
 
-    // Find existing room
-    let room = await Room.findOne({ roomId });
+    let room: any = await Room.findOne({ roomId });
 
     if (!room) {
-      // ROOM DOES NOT EXIST → Create new room
-      room = await Room.create({
+      room = new Room({
         roomId,
         ownerId: String(userId),
-        players: [
-          {
-            id: String(userId),
-            username,
-            joinedAt: new Date(),
-          },
-        ],
+        players: [],
         started: false,
         challenge: null,
       });
-    } else {
-      // ROOM EXISTS → Add player only if not already added
-      await Room.updateOne(
-        {
-          roomId,
-          "players.id": { $ne: String(userId) },
-        },
-        {
-          $push: {
-            players: {
-              id: String(userId),
-              username,
-              joinedAt: new Date(),
-            },
-          },
-        }
-      );
-
-      // Fetch updated room
-      room = await Room.findOne({ roomId }).lean();
     }
 
-    // RETURN room + logged userId
+    const alreadyJoined = room.players.some(
+      (p: any) => String(p.id) === String(userId)
+    );
+
+    if (!alreadyJoined) {
+      room.players.push({
+        id: String(userId),
+        username,
+        joinedAt: new Date(),
+      });
+    }
+
+    await room.save(); 
+
+   
+    try {
+      const io = getIO();
+      io.to(roomId).emit("room-updated", room);
+    } catch {
+      console.warn("Socket not ready yet");
+    }
+
     return NextResponse.json(
       {
         success: true,
         room,
-        userId: String(userId), // ⭐ IMPORTANT
+        userId: String(userId),
       },
       { status: 200 }
     );
