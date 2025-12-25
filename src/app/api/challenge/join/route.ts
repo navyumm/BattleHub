@@ -3,7 +3,6 @@ import { connect } from "@/dbConfig/dbConfig";
 import Room from "@/models/roomModel";
 import User from "@/models/userModel";
 import { getDataFromToken } from "@/helpers/getDataFromToken";
-import { getIO } from "@/lib/socket";
 
 await connect();
 
@@ -57,16 +56,7 @@ export async function POST(req: Request) {
         joinedAt: new Date(),
       });
     }
-
-    await room.save(); 
-
-   
-    try {
-      const io = getIO();
-      io.to(roomId).emit("room-updated", room);
-    } catch {
-      console.warn("Socket not ready yet");
-    }
+    await room.save();
 
     return NextResponse.json(
       {

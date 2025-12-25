@@ -1,22 +1,40 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { getSocket } from "@/lib/socketClient";
 
 export default function ChallengesPage() {
   const router = useRouter();
   const [roomId, setRoomId] = useState("");
 
+  /* -- SOCKET CONNECT -- */
+  useEffect(() => {
+    getSocket();
+  }, []);
+
+  /* -- CREATE ROOM -- */
   const createRoom = () => {
     const id = Math.random().toString(36).substring(2, 8);
+
+    const socket = getSocket();
+    socket.emit("join-room", { roomId: id });
+
     router.push(`/challenges/room/${id}`);
+        console.log("createee", id)
   };
 
+  /* -- JOIN ROOM -- */
   const joinRoom = () => {
     if (!roomId.trim()) return;
+
+    const socket = getSocket();
+    socket.emit("join-room", { roomId });
+
     router.push(`/challenges/room/${roomId}`);
   };
 
+  /* -- UI -- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-[#120019] to-black text-white flex flex-col items-center pt-28 pb-10 px-6">
       <h1 className="text-4xl font-bold text-orange-400 mb-6 text-center">
@@ -29,6 +47,7 @@ export default function ChallengesPage() {
       </p>
 
       <div className="bg-black/60 backdrop-blur-md border border-purple-500/30 shadow-2xl rounded-2xl p-8 w-full max-w-md flex flex-col items-center">
+        {/* Create Room */}
         <button
           onClick={createRoom}
           className="w-full py-3 mb-6 bg-gradient-to-r from-orange-500 to-orange-600 rounded-xl font-semibold text-lg hover:scale-105 transition-all"
@@ -36,6 +55,7 @@ export default function ChallengesPage() {
           Create New Room
         </button>
 
+        {/* Join Room */}
         <div className="w-full flex flex-col gap-4">
           <input
             type="text"

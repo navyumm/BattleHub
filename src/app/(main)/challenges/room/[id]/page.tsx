@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { io, Socket } from "socket.io-client";
+import type { Socket } from "socket.io-client";
+import { getSocket } from "@/lib/socketClient";
 import PlayPage from "@/app/(main)/play/page";
 
 type Player = {
@@ -12,17 +13,18 @@ type Player = {
 };
 
 export default function RoomPage() {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const routerRef = useRef(router);
 
   const [players, setPlayers] = useState<Player[]>([]);
   const [room, setRoom] = useState<any>(null);
   const [loggedUserId, setLoggedUserId] = useState<string | null>(null);
 
-  const joinedRef = useRef(false);
   const socketRef = useRef<Socket | null>(null);
+  const joinedRef = useRef(false);
 
-  /* -------------------------------- JOIN ROOM -------------------------------- */
+  /* ----------------------------- JOIN ROOM (API) ----------------------------- */
   useEffect(() => {
     if (!id || joinedRef.current) return;
     joinedRef.current = true;
@@ -34,7 +36,7 @@ export default function RoomPage() {
     })
       .then((res) => res.json())
       .then((data) => {
-        if (!data.success || !data.room) return;
+        if (!data?.success || !data?.room) return;
 
         setPlayers(data.room.players);
         setRoom(data.room);
@@ -47,58 +49,62 @@ export default function RoomPage() {
       .catch(console.error);
   }, [id, router]);
 
-  /* ------------------------------- SOCKET SETUP ------------------------------- */
-useEffect(() => {
-  if (!id) return;
+  /* ----------------------------- SOCKET SETUP ----------------------------- */
 
-  // 🔥 important: pehle server init
-  fetch("/api/socket").then(() => {
-    const socket = io({
-      path: "/api/socket",
-      transports: ["websocket"],
-    });
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
 
+  useEffect(() => {
+    if (!id) return;
+
+    const socket = getSocket();
     socketRef.current = socket;
 
-    socket.on("connect", () => {
-      console.log("SOCKET CONNECTED:", socket.id);
-      socket.emit("join-room", id);
-    });
+    // join socket room
+    socket.emit("join-room", { roomId: id });
 
     socket.on("challenge-started", ({ day }) => {
-      router.push(`/play/${day}?roomId=${id}`);
+      console.log("🔥 challenge-started received", day);
+
+      setTimeout(() => {
+        routerRef.current.replace(`/play/${day}?roomId=${id}`);
+      }, 0);
     });
-  });
 
-  return () => {
-    socketRef.current?.disconnect();
-  };
-}, [id]);
+    return () => {
+      socket.off("challenge-started");
+    };
+  }, [id, router]);
 
-  /* -------------------------------- HOST CHECK -------------------------------- */
+  /* ----------------------------- HOST CHECK ----------------------------- */
   const isHost =
     loggedUserId && room?.ownerId
       ? String(loggedUserId) === String(room.ownerId)
       : false;
 
-  /* --------------------------- HOST SELECT CHALLENGE --------------------------- */
-const handleSelectChallenge = async (day: number, image: string) => {
-  try {
-    const res = await fetch("/api/challenge/select", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ roomId: id, day, image }),
-    });
+  /* ----------------------- HOST SELECT CHALLENGE ----------------------- */
+  const handleSelectChallenge = async (day: number, image: string) => {
+    try {
+      const res = await fetch("/api/challenge/select", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ roomId: id, day, image }),
+      });
 
-    const data = await res.json();
-    if (!data.success) return;
+      const data = await res.json();
+      if (!data?.success) return;
 
-    router.push(`/play/${day}?roomId=${id}`);
-  } catch (error) {
-    console.error("Select challenge error:", error);
-  }
-};
+      console.log("🔥 emitting start-challenge", id, day);
 
+      socketRef.current?.emit("start-challenge", {
+        roomId: id,
+        day,
+      });
+    } catch (error) {
+      console.error("Select challenge error:", error);
+    }
+  };
 
   /* ---------------------------------- UI ---------------------------------- */
   return (
@@ -109,9 +115,7 @@ const handleSelectChallenge = async (day: number, image: string) => {
 
       {/* Players */}
       <div className="bg-black/60 border border-purple-500/30 rounded-2xl p-8 w-full max-w-md mb-8">
-        <h2 className="text-xl font-semibold text-purple-300 mb-4">
-          Players
-        </h2>
+        <h2 className="text-xl font-semibold text-purple-300 mb-4">Players</h2>
 
         {players.map((player) => (
           <div
@@ -123,7 +127,7 @@ const handleSelectChallenge = async (day: number, image: string) => {
         ))}
       </div>
 
-      {/* HOST — SELECT CHALLENGE */}
+      {/* HOST */}
       {!room?.challenge && isHost && (
         <PlayPage
           isRoomMode
@@ -132,14 +136,14 @@ const handleSelectChallenge = async (day: number, image: string) => {
         />
       )}
 
-      {/* NON-HOST — WAITING */}
+      {/* NON-HOST */}
       {!room?.challenge && !isHost && (
         <p className="text-gray-400 text-lg mt-6">
           Waiting for host to select a challenge…
         </p>
       )}
 
-      {/* AFTER CHALLENGE SELECTED */}
+      {/* CHALLENGE SELECTED */}
       {room?.challenge && (
         <div className="mt-10 bg-black/60 border border-purple-500/30 p-6 rounded-2xl w-full max-w-lg text-center">
           <h2 className="text-2xl font-bold text-purple-400 mb-4">

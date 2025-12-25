@@ -2,7 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
 import Room from "@/models/roomModel";
 import { getDataFromToken } from "@/helpers/getDataFromToken";
-import { getIO } from "@/lib/socket";
+import { io } from "socket.io-client";
 
 await connect();
 
@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    //  Host check
     if (String(room.ownerId) !== String(userId)) {
       return NextResponse.json(
         { success: false, message: "Only host can select challenges." },
@@ -40,23 +41,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // ✅ Save challenge
+    //  Save challenge
     room.challenge = { day, image };
     room.started = true;
     await room.save();
 
-    // ✅ Emit ONLY if socket is ready
+    // SOCKET EMIT 
     try {
-      const io = getIO();
-      io.to(roomId).emit("challenge-started", { day });
-    } catch {
-      console.warn("Socket not initialized yet");
+      const socket = io("http://localhost:3001");
+      socket.emit("start-challenge", { roomId, day });
+      // console.log("start-challenge", roomId, day )
+      socket.disconnect();
+    } catch (err) {
+      console.warn("Socket emit failed:", err);
     }
 
     return NextResponse.json({
       success: true,
       message: "Challenge selected & started.",
-      room,
     });
   } catch (error) {
     console.error("Select API error:", error);
