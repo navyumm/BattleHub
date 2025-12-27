@@ -29,8 +29,8 @@
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",
     "resemblejs": "^5.0.0",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
