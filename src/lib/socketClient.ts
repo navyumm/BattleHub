@@ -2,14 +2,20 @@ import { io, Socket } from "socket.io-client";
 
 let socket: Socket | null = null;
 
-export const getSocket = async () => {
+export const getSocket = () => {
   if (!socket) {
-    // First hit API to init server
-    await fetch("/api/socket");
+    socket = io("http://localhost:3001", {
+      transports: ["websocket"],
+    });
 
-    socket = io({
-      path: "/api/socket",
+    socket.on("connect", () => {
+      console.log("🟢 Global socket connected:", socket?.id);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("🔴 Global socket disconnected");
     });
   }
+
   return socket;
 };
