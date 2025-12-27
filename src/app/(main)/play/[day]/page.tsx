@@ -16,25 +16,20 @@ interface RoomMeta {
   image: string;
 }
 
-interface RoomResponse {
-  room?: {
-    meta?: RoomMeta;
-  };
-}
-
 interface PlayPageProps {
-  roomId?: string; 
+  roomId?: string;
   onSubmitted?: () => void;
 }
 
-export default function PlayPage({ roomId, onSubmitted}: PlayPageProps) {
+export default function PlayPage({ roomId, onSubmitted }: PlayPageProps) {
   const params = useParams<{ day?: string }>();
   const dayParam = params?.day;
-
 
   /* ================= STATE ================= */
   const [targetImg, setTargetImg] = useState<string | null>(null);
   const [challengeDay, setChallengeDay] = useState<string | null>(null);
+  const [matchScore, setMatchScore] = useState<number | null>(null);
+  const [colors, setColors] = useState<string[]>([]);
 
   const [code, setCode] = useState<string>(`
 <div></div>
@@ -52,86 +47,86 @@ div {
 </style>
 `);
 
-  const [matchScore, setMatchScore] = useState<number | null>(null);
-  const [colors, setColors] = useState<string[]>([]);
-
   /* =====================================================
-     LOAD CHALLENGE (ROOM MODE > SOLO MODE)
+     LOAD CHALLENGE
+     Priority: ROOM MODE → SOLO MODE
   ===================================================== */
-useEffect(() => {
-  if (roomId) {
-    fetch(`/api/challenge/room/${roomId}`)
-      .then(res => res.json())
-      .then(data => {
-        console.log("ROOM API RESPONSE:", data); // 👈 ADD THIS
+  useEffect(() => {
+    // 🟣 ROOM MODE
+    if (roomId) {
+      fetch(`/api/challenge/room/${roomId}`)
+        .then((res) => res.json())
+        .then((data) => {
+          const meta: RoomMeta | undefined = data?.room?.meta;
+          if (meta?.image && meta?.challengeDay !== undefined) {
+            setTargetImg(meta.image);
+            setChallengeDay(String(meta.challengeDay));
+          }
+        })
+        .catch(() => {
+          toast.error("Failed to load room challenge");
+        });
 
-        const meta = data?.room?.meta;
-        console.log("META:", meta);               // 👈 ADD THIS
+      return;
+    }
 
-        if (meta?.image && meta?.challengeDay !== undefined) {
-          setTargetImg(meta.image);
-          setChallengeDay(String(meta.challengeDay));
-        }
-      });
-    return;
-  }
-}, [roomId]);
-
+    // 🔵 SOLO MODE
+    if (dayParam) {
+      const monthAbbr = dayjs().format("MMM").toLowerCase();
+      setTargetImg(`/${monthAbbr}-${dayParam}.png`);
+      setChallengeDay(dayParam);
+    }
+  }, [roomId, dayParam]);
 
   /* =====================================================
      SUBMIT & SCORE
   ===================================================== */
-const handleCheckMatch = async (): Promise<void> => {
-  try {
-    const iframe = document.querySelector(
-      "iframe"
-    ) as HTMLIFrameElement | null;
+  const handleCheckMatch = async (): Promise<void> => {
+    try {
+      const iframe = document.querySelector(
+        "iframe"
+      ) as HTMLIFrameElement | null;
 
-    if (!iframe?.contentDocument?.body) {
-      toast.error("Preview not ready");
-      return;
-    }
+      if (!iframe?.contentDocument?.body || !targetImg) {
+        toast.error("Preview not ready");
+        return;
+      }
 
-    const canvas = await html2canvas(iframe.contentDocument.body, {
-      backgroundColor: null,
-    });
+      const canvas = await html2canvas(iframe.contentDocument.body, {
+        backgroundColor: null,
+      });
 
-    const previewImage = canvas.toDataURL("image/png");
-    const similarity = await compareImages(
-      targetImg as string,
-      previewImage
-    );
+      const previewImage = canvas.toDataURL("image/png");
+      const similarity = await compareImages(targetImg, previewImage);
 
-    setMatchScore(similarity);
+      setMatchScore(similarity);
 
-    // 1️⃣ Save score (global / solo safe)
-    await fetch("/api/score/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day: challengeDay,
-        score: similarity,
-      }),
-    });
-
-    // 2️⃣ Save score in ROOM (for other players)
-    if (roomId) {
-      await fetch(`/api/challenge/room/${roomId}/score`, {
+      // save solo score
+      await fetch("/api/score/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ score: similarity }),
+        body: JSON.stringify({
+          day: challengeDay,
+          score: similarity,
+        }),
       });
+
+      // save room score
+      if (roomId) {
+        await fetch(`/api/challenge/room/${roomId}/score`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ score: similarity }),
+        });
+      }
+
+      toast.success(`Image matched ${similarity}%`);
+      onSubmitted?.();
+    } catch (err) {
+      console.error(err);
+      toast.error("Comparison failed");
     }
-
-    toast.success(`Image matched ${similarity}%`);
-
-    // 3️⃣ 🔥 TELL PARENT (IMPORTANT)
-    onSubmitted?.();
-  } catch (err) {
-    console.error(err);
-    toast.error("Comparison failed");
-  }
-};
+  };
 
   /* =====================================================
      COLOR PALETTE
@@ -140,12 +135,12 @@ const handleCheckMatch = async (): Promise<void> => {
     if (!targetImg) return;
 
     getColorPalette(targetImg)
-      .then((palette) => setColors(palette))
+      .then(setColors)
       .catch(() => setColors([]));
   }, [targetImg]);
 
   /* =====================================================
-     LOADING STATE
+     LOADING
   ===================================================== */
   if (!targetImg) {
     return (
@@ -160,7 +155,7 @@ const handleCheckMatch = async (): Promise<void> => {
   ===================================================== */
   return (
     <div className="flex w-full bg-[#0d0d0d] text-white overflow-hidden pt-[80px] h-[calc(100vh-80px)]">
-      {/* ================= LEFT ================= */}
+      {/* LEFT */}
       <div className="w-1/3 h-full border-r border-purple-500/20 flex flex-col">
         <div className="flex-1">
           <CodeEditor code={code} setCode={setCode} />
@@ -169,7 +164,7 @@ const handleCheckMatch = async (): Promise<void> => {
         <div className="h-[18vh] flex flex-col items-center justify-center border-t border-purple-500/20 bg-[#111] p-2">
           <button
             onClick={handleCheckMatch}
-            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg transition font-semibold"
+            className="px-6 py-2 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold"
           >
             Submit
           </button>
@@ -185,14 +180,14 @@ const handleCheckMatch = async (): Promise<void> => {
         </div>
       </div>
 
-      {/* ================= RIGHT ================= */}
+      {/* RIGHT */}
       <div className="w-2/3 h-full flex gap-4 p-4">
-        <div className="w-1/2 h-[50vh] flex items-center justify-center bg-[#111] rounded-xl overflow-hidden">
+        <div className="w-1/2 h-[50vh] flex items-center justify-center bg-[#111] rounded-xl">
           <ComparePreview code={code} targetImage={targetImg} />
         </div>
 
         <div className="w-1/2 flex flex-col gap-4">
-          <div className="h-[50vh] flex items-center justify-center bg-[#111] rounded-xl shadow-lg">
+          <div className="h-[50vh] flex items-center justify-center bg-[#111] rounded-xl">
             <img
               src={targetImg}
               alt={`Target ${challengeDay}`}

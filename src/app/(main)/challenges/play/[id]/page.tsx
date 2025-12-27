@@ -55,7 +55,7 @@ export default function ChallengePlay() {
       {!submitted && (
         <PlayPage
           roomId={String(id)}
-          onSubmitted={() => setSubmitted(true)} // ✅ ONLY SOURCE OF TRUTH
+          onSubmitted={() => setSubmitted(true)} 
         />
       )}
 
