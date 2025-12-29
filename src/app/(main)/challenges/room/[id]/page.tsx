@@ -37,14 +37,13 @@ export default function RoomPage() {
         if (data?.success && data.room) {
           setRoom(data.room);
           setPlayers(data.room.players || []);
-          setIsHost(data.isHost); // ✅ FIXED LINE
+          setIsHost(data.isHost); 
         }
       })
       .catch(console.error)
       .finally(() => setLoadingJoin(false));
   }, [id]);
 
-  /* ---------------- POLLING ---------------- */
   useEffect(() => {
     if (!id) return;
 
