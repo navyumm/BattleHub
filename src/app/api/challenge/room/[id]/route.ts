@@ -1,21 +1,21 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { connect } from "@/dbConfig/dbConfig";
 import Room from "@/models/roomModel";
 
 await connect();
 
 export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const url = new URL(req.url);
+    const { id } = await context.params;
 
-    const match = req.url.match(/\/api\/challenge\/room\/([^/?]+)/);
-    const roomId =
-      (match && match[1]) ||
-      params?.id ||
-      url.pathname.split("/").pop();
+    const url = new URL(request.url);
+
+    // fallback safety (optional but fine)
+    const match = request.url.match(/\/api\/challenge\/room\/([^/?]+)/);
+    const roomId = id || (match && match[1]) || url.pathname.split("/").pop();
 
     if (!roomId) {
       return NextResponse.json(
@@ -24,7 +24,6 @@ export async function GET(
       );
     }
 
-    // 🔥 TELL TYPESCRIPT: this is a single room object
     const room = (await Room.findOne({ roomId }).lean()) as
       | {
           roomId: string;
